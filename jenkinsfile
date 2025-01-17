@@ -1,0 +1,85 @@
+pipeline {
+    agent any
+
+    environment {
+        
+        GIT_REPO = 'https://github.com/athul1207/Patient_Details_app.git'
+        GIT_BRANCH = 'main'
+        IMAGE_NAME = 'athul1207/patient_details'  
+        IMAGE_TAG = 'latest'
+
+       
+        DOCKER_USERNAME = 'athul1207'
+        DOCKER_PASSWORD = 'athul@2001'
+
+        
+        EC2_USER = 'ubuntu'                
+        EC2_HOST = '13.235.72.223'         
+        EC2_SSH_KEY_ID = 'e69fe790-f109-47b3-b3e7-940528778010'  
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    
+                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
+                }
+            }
+        }
+
+        stage('Login to Docker Hub') {
+            steps {
+                script {
+                   
+                    sh "echo ${DOCKER_PASSWORD} | docker login -u ${DOCKER_USERNAME} --password-stdin"
+                }
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                script {
+                    
+                    sh "docker push ${IMAGE_NAME}:${IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                script {
+                   
+                    sshagent (credentials: [EC2_SSH_KEY_ID]) {
+                        sh """
+                            ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
+                                
+                                docker pull ${IMAGE_NAME}:${IMAGE_TAG}
+                                
+                               
+                                docker stop patient_details || true
+                                docker rm patient_details || true
+
+                               
+                                docker run -d --name patient120767 -p 5055:5000 ${IMAGE_NAME}:${IMAGE_TAG}
+                            EOF
+                        """
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs() 
+        }
+    }
+}
